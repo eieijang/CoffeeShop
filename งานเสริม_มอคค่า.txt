@@ -1,0 +1,43 @@
+งานเสริม (ไม่บังคับ) - เพิ่มมอคค่าเย็น
+1) ใน SeedData.InitializeAsync เปลี่ยน
+       if (await db.Categories.AnyAsync()) return;
+   เป็น
+       if (await db.Categories.AnyAsync()) { await SeedMochaAsync(db); return; }
+2) ต่อจาก await db.SaveChangesAsync(); ท้ายเมธอด InitializeAsync เพิ่ม
+       await SeedMochaAsync(db);
+3) วางเมธอดนี้ในคลาส SeedData
+
+    // งานเสริม: มอคค่าเย็น + ซอสช็อกโกแลต (รันซ้ำได้ ไม่เกิดข้อมูลซ้ำ)
+    private static async Task SeedMochaAsync(CoffeeShopDbContext db)
+    {
+        if (await db.Products.AnyAsync(p => p.Name == "มอคค่าเย็น")) return;
+
+        var coffee = await db.Categories.FirstAsync(c => c.Name == "กาแฟ");
+        var bean = await db.Ingredients.FirstAsync(i => i.Name == "เมล็ดกาแฟคั่ว");
+        var milk = await db.Ingredients.FirstAsync(i => i.Name == "นมสด");
+        var cup = await db.Ingredients.FirstAsync(i => i.Name == "แก้ว 16 oz");
+
+        var choco = await db.Ingredients.FirstOrDefaultAsync(i => i.Name == "ซอสช็อกโกแลต")
+            ?? new Ingredient
+            {
+                Name = "ซอสช็อกโกแลต", Unit = "ml", CostPerUnit = 0.40m,
+                StockQty = 2000, ReorderLevel = 400
+            };
+
+        var mocha = new Product { Name = "มอคค่าเย็น", Category = coffee, BasePrice = 65 };
+
+        var groups = await db.OptionGroups
+            .Where(g => g.Name == "ขนาด" || g.Name == "ระดับความหวาน" || g.Name == "ท็อปปิง")
+            .ToListAsync();
+        foreach (var g in groups)
+            mocha.ProductOptionGroups.Add(new ProductOptionGroup { OptionGroup = g });
+
+        mocha.Recipes.Add(new Recipe { Ingredient = bean, Quantity = 18 });
+        mocha.Recipes.Add(new Recipe { Ingredient = milk, Quantity = 120 });
+        mocha.Recipes.Add(new Recipe { Ingredient = choco, Quantity = 20 });
+        mocha.Recipes.Add(new Recipe { Ingredient = cup, Quantity = 1 });
+
+        db.Products.Add(mocha);
+        await db.SaveChangesAsync();
+    }
+
